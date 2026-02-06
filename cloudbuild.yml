@@ -11,7 +11,7 @@ steps:
       [
         "run",
         "deploy",
-        "expense-tracker",
+        "expense-tracker-api",
         "--image",
         "gcr.io/$PROJECT_ID/expense-tracker",
         "--region",
@@ -19,7 +19,7 @@ steps:
         "--allow-unauthenticated",
 
         "--set-secrets",
-        "JWT_SECRET=JWT_SECRET:latest,DB_HOST=DB_HOST:latest,DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,DB_NAME=DB_NAME:latest",
+        "JWT_SECRET=JWT_SECRET:latest,DB_HOST=DB_HOST:latest,DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,DB_NAME=DB_NAME:latest, PORT=PORT:latest, JWT_EXPIRES_IN=JWT_EXPIRES_IN:latest",
       ]
 
 options:
