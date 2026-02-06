@@ -21,6 +21,8 @@ steps:
         "project-99dfbd22-2b8b-4112-9d9:europe-west4:expense-tracker-db",
         "--set-secrets",
         "JWT_SECRET=JWT_SECRET:latest,DB_HOST=DB_HOST:latest,DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,DB_NAME=DB_NAME:latest,JWT_EXPIRES_IN=JWT_EXPIRES_IN:latest",
+        "--set-env-vars",
+        "INSTANCE_CONNECTION_NAME=project-99dfbd22-2b8b-4112-9d9:europe-west4:expense-tracker-db",
       ]
 
 options:
