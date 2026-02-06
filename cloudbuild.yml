@@ -19,7 +19,7 @@ steps:
         "--allow-unauthenticated",
 
         "--set-secrets",
-        "JWT_SECRET=jwt-secret:latest,DB_HOST=db-host:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest",
+        "JWT_SECRET=JWT_SECRET:latest,DB_HOST=DB_HOST:latest,DB_USER=DB_USER:latest,DB_PASSWORD=DB_PASSWORD:latest,DB_NAME=DB_NAME:latest",
       ]
 
 options:
