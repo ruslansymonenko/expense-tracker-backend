@@ -7,6 +7,7 @@ import categoriesRoutes from "./routes/categories";
 import expensesRoutes from "./routes/expenses";
 
 const app = express();
+// Cloud Run injects PORT env variable, default to 8080
 const PORT = config.port;
 
 app.use(cors());
@@ -35,13 +36,23 @@ app.use(
 const startServer = async () => {
   try {
     await initDatabase();
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
     });
   } catch (error) {
     console.error("Failed to start server:", error);
     process.exit(1);
   }
 };
+
+// Graceful shutdown
+const gracefulShutdown = () => {
+  console.log("Received shutdown signal, closing server gracefully...");
+  process.exit(0);
+};
+
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
 
 startServer();
