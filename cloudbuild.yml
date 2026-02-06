@@ -5,13 +5,21 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "gcr.io/$PROJECT_ID/expense-tracker"]
 
-  - name: "gcr.io/cloud-builders/gcloud"
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
     args:
       [
-        "app",
+        "run",
         "deploy",
-        "--image-url=gcr.io/$PROJECT_ID/expense-tracker",
-        "--quiet",
+        "expense-tracker",
+        "--image",
+        "gcr.io/$PROJECT_ID/expense-tracker",
+        "--region",
+        "us-central1",
+        "--allow-unauthenticated",
+
+        "--set-secrets",
+        "JWT_SECRET=jwt-secret:latest,DB_HOST=db-host:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest",
       ]
 
 options:
