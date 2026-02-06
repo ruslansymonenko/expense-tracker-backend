@@ -7,7 +7,6 @@ import categoriesRoutes from "./routes/categories";
 import expensesRoutes from "./routes/expenses";
 
 const app = express();
-// Cloud Run injects PORT env variable, default to 8080
 const PORT = config.port;
 
 app.use(cors());
@@ -46,7 +45,6 @@ const startServer = async () => {
   }
 };
 
-// Graceful shutdown
 const gracefulShutdown = () => {
   console.log("Received shutdown signal, closing server gracefully...");
   process.exit(0);
