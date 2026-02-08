@@ -1,8 +1,6 @@
 import { Router, Response } from "express";
-import { v4 as uuidv4 } from "uuid";
-import { pool } from "../config/database";
+import { Expense, Category } from "../models";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
-import { RowDataPacket } from "mysql2";
 
 const router = Router();
 
@@ -10,24 +8,30 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId;
 
-    const [expenses] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        e.id, 
-        e.title, 
-        e.amount, 
-        e.date, 
-        e.user_id as userId,
-        e.category_id as categoryId,
-        c.name as category
-       FROM expenses e
-       JOIN categories c ON e.category_id = c.id
-       WHERE e.user_id = ?
-       ORDER BY e.date DESC`,
-      [userId],
-    );
+    const expenses = await Expense.findAll({
+      where: { userId },
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["name", "icon", "color"],
+        },
+      ],
+      order: [["date", "DESC"]],
+    });
+
+    const formattedExpenses = expenses.map((expense) => ({
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount,
+      date: expense.date,
+      userId: expense.userId,
+      categoryId: expense.categoryId,
+      category: expense.category?.name,
+    }));
 
     res.json({
-      data: expenses,
+      data: formattedExpenses,
       meta: { count: expenses.length },
     });
   } catch (error) {
@@ -38,26 +42,35 @@ router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
 
 router.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const [expenses] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        e.id, 
-        e.title, 
-        e.amount, 
-        e.date, 
-        e.user_id as userId,
-        e.category_id as categoryId,
-        c.name as category
-       FROM expenses e
-       JOIN categories c ON e.category_id = c.id
-       WHERE e.id = ? AND e.user_id = ?`,
-      [req.params.id, req.userId],
-    );
+    const expense = await Expense.findOne({
+      where: {
+        id: req.params.id,
+        userId: req.userId,
+      },
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["name", "icon", "color"],
+        },
+      ],
+    });
 
-    if (expenses.length === 0) {
+    if (!expense) {
       return res.status(404).json({ error: "Expense not found" });
     }
 
-    res.json(expenses[0]);
+    const formattedExpense = {
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount,
+      date: expense.date,
+      userId: expense.userId,
+      categoryId: expense.categoryId,
+      category: expense.category?.name,
+    };
+
+    res.json(formattedExpense);
   } catch (error) {
     console.error("Get expense error:", error);
     res.status(500).json({ error: "Failed to fetch expense" });
@@ -79,37 +92,46 @@ router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: "Amount must be positive" });
     }
 
-    const [categories] = await pool.query<RowDataPacket[]>(
-      "SELECT id, name FROM categories WHERE id = ?",
-      [categoryId],
-    );
+    const category = await Category.findOne({
+      where: {
+        id: categoryId,
+        userId,
+      },
+    });
 
-    if (categories.length === 0) {
+    if (!category) {
       return res.status(400).json({ error: "Invalid category" });
     }
 
-    const expenseId = uuidv4();
-    await pool.query(
-      "INSERT INTO expenses (id, title, amount, category_id, date, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-      [expenseId, title, amount, categoryId, date, userId],
-    );
+    const expense = await Expense.create({
+      title,
+      amount,
+      categoryId,
+      date,
+      userId: userId!,
+    });
 
-    const [newExpense] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        e.id, 
-        e.title, 
-        e.amount, 
-        e.date, 
-        e.user_id as userId,
-        e.category_id as categoryId,
-        c.name as category
-       FROM expenses e
-       JOIN categories c ON e.category_id = c.id
-       WHERE e.id = ?`,
-      [expenseId],
-    );
+    await expense.reload({
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["name", "icon", "color"],
+        },
+      ],
+    });
 
-    res.status(201).json(newExpense[0]);
+    const formattedExpense = {
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount,
+      date: expense.date,
+      userId: expense.userId,
+      categoryId: expense.categoryId,
+      category: expense.category?.name,
+    };
+
+    res.status(201).json(formattedExpense);
   } catch (error) {
     console.error("Create expense error:", error);
     res.status(500).json({ error: "Failed to create expense" });
@@ -119,32 +141,56 @@ router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.put("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { title, amount, categoryId, date } = req.body;
+    const userId = req.userId;
 
-    await pool.query(
-      "UPDATE expenses SET title = ?, amount = ?, category_id = ?, date = ? WHERE id = ? AND user_id = ?",
-      [title, amount, categoryId, date, req.params.id, req.userId],
-    );
+    const expense = await Expense.findOne({
+      where: {
+        id: req.params.id,
+        userId,
+      },
+    });
 
-    const [updatedExpense] = await pool.query<RowDataPacket[]>(
-      `SELECT 
-        e.id, 
-        e.title, 
-        e.amount, 
-        e.date, 
-        e.user_id as userId,
-        e.category_id as categoryId,
-        c.name as category
-       FROM expenses e
-       JOIN categories c ON e.category_id = c.id
-       WHERE e.id = ? AND e.user_id = ?`,
-      [req.params.id, req.userId],
-    );
-
-    if (updatedExpense.length === 0) {
+    if (!expense) {
       return res.status(404).json({ error: "Expense not found" });
     }
 
-    res.json(updatedExpense[0]);
+    if (categoryId) {
+      const category = await Category.findOne({
+        where: {
+          id: categoryId,
+          userId,
+        },
+      });
+
+      if (!category) {
+        return res.status(400).json({ error: "Invalid category" });
+      }
+    }
+
+    await expense.update({ title, amount, categoryId, date });
+
+    // Reload with category information
+    await expense.reload({
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["name", "icon", "color"],
+        },
+      ],
+    });
+
+    const formattedExpense = {
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount,
+      date: expense.date,
+      userId: expense.userId,
+      categoryId: expense.categoryId,
+      category: expense.category?.name,
+    };
+
+    res.json(formattedExpense);
   } catch (error) {
     console.error("Update expense error:", error);
     res.status(500).json({ error: "Failed to update expense" });
@@ -156,14 +202,18 @@ router.delete(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const [result]: any = await pool.query(
-        "DELETE FROM expenses WHERE id = ? AND user_id = ?",
-        [req.params.id, req.userId],
-      );
+      const expense = await Expense.findOne({
+        where: {
+          id: req.params.id,
+          userId: req.userId,
+        },
+      });
 
-      if (result.affectedRows === 0) {
+      if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }
+
+      await expense.destroy();
 
       res.json({ message: "Expense deleted successfully" });
     } catch (error) {
