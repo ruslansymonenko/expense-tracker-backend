@@ -4,12 +4,14 @@ import { User, Category, Expense } from "../models";
 
 export const sequelize = new Sequelize({
   dialect: "mysql",
-  host: config.database.socketPath,
   username: config.database.user,
   password: config.database.password,
   database: config.database.name,
   models: [User, Category, Expense],
   logging: process.env.NODE_ENV === "development" ? console.log : false,
+  dialectOptions: {
+    socketPath: config.database.socketPath,
+  },
   pool: {
     max: 10,
     min: 0,
