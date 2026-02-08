@@ -1,11 +1,8 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
-import { pool } from "../config/database";
 import { config } from "../config/config";
-import { User } from "../types";
-import { RowDataPacket } from "mysql2";
+import { User } from "../models";
 
 const router = Router();
 
@@ -25,29 +22,26 @@ router.post("/register", async (req: Request, res: Response) => {
         .json({ error: "Password must be at least 6 characters" });
     }
 
-    const [existingUsers] = await pool.query<RowDataPacket[]>(
-      "SELECT id FROM users WHERE email = ?",
-      [email],
-    );
+    const existingUser = await User.findOne({ where: { email } });
 
-    if (existingUsers.length > 0) {
+    if (existingUser) {
       return res.status(400).json({ error: "Email already registered" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const userId = uuidv4();
-    await pool.query(
-      "INSERT INTO users (id, email, name, password) VALUES (?, ?, ?, ?)",
-      [userId, email, name, hashedPassword],
-    );
+    const user = await User.create({
+      email,
+      name,
+      password: hashedPassword,
+    });
 
-    const token = jwt.sign({ userId }, config.jwtSecret, {
+    const token = jwt.sign({ userId: user.id }, config.jwtSecret, {
       expiresIn: config.jwtExpiresIn as any,
     });
 
     res.status(201).json({
-      user: { id: userId, email, name },
+      user: { id: user.id, email: user.email, name: user.name },
       token,
     });
   } catch (error) {
@@ -64,16 +58,11 @@ router.post("/login", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const [users] = await pool.query<RowDataPacket[]>(
-      "SELECT * FROM users WHERE email = ?",
-      [email],
-    );
+    const user = await User.findOne({ where: { email } });
 
-    if (users.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
-
-    const user = users[0] as User;
 
     const isValidPassword = await bcrypt.compare(password, user.password);
 

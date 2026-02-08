@@ -1,27 +1,7 @@
+import "reflect-metadata";
 import bcrypt from "bcryptjs";
-import { v4 as uuidv4 } from "uuid";
-import { pool, initDatabase } from "./config/database";
-
-const categories = [
-  { id: uuidv4(), name: "Food", icon: "fast-food", color: "#f59e0b" },
-  { id: uuidv4(), name: "Transport", icon: "car", color: "#3b82f6" },
-  {
-    id: uuidv4(),
-    name: "Entertainment",
-    icon: "game-controller",
-    color: "#8b5cf6",
-  },
-  { id: uuidv4(), name: "Shopping", icon: "cart", color: "#ec4899" },
-  { id: uuidv4(), name: "Bills", icon: "receipt", color: "#ef4444" },
-  { id: uuidv4(), name: "Health", icon: "medical", color: "#10b981" },
-  { id: uuidv4(), name: "Education", icon: "school", color: "#06b6d4" },
-  {
-    id: uuidv4(),
-    name: "Other",
-    icon: "ellipsis-horizontal",
-    color: "#6b7280",
-  },
-];
+import { initDatabase, sequelize } from "./config/database";
+import { User, Category, Expense } from "./models";
 
 const seedDatabase = async () => {
   try {
@@ -29,99 +9,101 @@ const seedDatabase = async () => {
 
     await initDatabase();
 
-    await pool.query("DELETE FROM expenses");
-    await pool.query("DELETE FROM categories");
-    await pool.query("DELETE FROM users");
-
+    await Expense.destroy({ where: {}, force: true });
+    await Category.destroy({ where: {}, force: true });
+    await User.destroy({ where: {}, force: true });
     console.log("✅ Cleared existing data");
 
-    for (const category of categories) {
-      await pool.query(
-        "INSERT INTO categories (id, name, icon, color) VALUES (?, ?, ?, ?)",
-        [category.id, category.name, category.icon, category.color],
-      );
-    }
-    console.log("✅ Seeded categories");
+    const testUser = await User.create({
+      email: "test@test.com",
+      name: "Test User",
+      password: await bcrypt.hash("123456", 10),
+    });
 
-    const users = [
-      {
-        id: uuidv4(),
-        email: "test@test.com",
-        name: "Test User",
-        password: await bcrypt.hash("123456", 10),
-      },
-      {
-        id: uuidv4(),
-        email: "demo@example.com",
-        name: "Demo User",
-        password: await bcrypt.hash("demo123", 10),
-      },
-    ];
-
-    for (const user of users) {
-      await pool.query(
-        "INSERT INTO users (id, email, name, password) VALUES (?, ?, ?, ?)",
-        [user.id, user.email, user.name, user.password],
-      );
-    }
+    const demoUser = await User.create({
+      email: "demo@example.com",
+      name: "Demo User",
+      password: await bcrypt.hash("demo123", 10),
+    });
     console.log("✅ Seeded users");
 
-    const testUser = users[0];
-    const expenses = [
+    const categoriesData = [
+      { name: "Food", icon: "fast-food", color: "#f59e0b" },
+      { name: "Transport", icon: "car", color: "#3b82f6" },
+      { name: "Entertainment", icon: "game-controller", color: "#8b5cf6" },
+      { name: "Shopping", icon: "cart", color: "#ec4899" },
+      { name: "Bills", icon: "receipt", color: "#ef4444" },
+      { name: "Health", icon: "medical", color: "#10b981" },
+      { name: "Education", icon: "school", color: "#06b6d4" },
+      { name: "Other", icon: "ellipsis-horizontal", color: "#6b7280" },
+    ];
+
+    const testUserCategories = await Promise.all(
+      categoriesData.map((cat) =>
+        Category.create({
+          ...cat,
+          userId: testUser.id,
+        }),
+      ),
+    );
+    console.log("✅ Seeded categories for test user");
+
+    await Promise.all(
+      categoriesData.map((cat) =>
+        Category.create({
+          ...cat,
+          userId: demoUser.id,
+        }),
+      ),
+    );
+    console.log("✅ Seeded categories for demo user");
+
+    const expensesData = [
       {
-        id: uuidv4(),
         title: "Grocery Shopping",
         amount: 85.5,
-        category_id: categories.find((c) => c.name === "Food")!.id,
+        categoryName: "Food",
         date: new Date("2026-02-03"),
-        user_id: testUser.id,
       },
       {
-        id: uuidv4(),
         title: "Uber Ride",
         amount: 15.2,
-        category_id: categories.find((c) => c.name === "Transport")!.id,
+        categoryName: "Transport",
         date: new Date("2026-02-04"),
-        user_id: testUser.id,
       },
       {
-        id: uuidv4(),
         title: "Netflix Subscription",
         amount: 12.99,
-        category_id: categories.find((c) => c.name === "Entertainment")!.id,
+        categoryName: "Entertainment",
         date: new Date("2026-02-01"),
-        user_id: testUser.id,
       },
       {
-        id: uuidv4(),
         title: "New Shoes",
         amount: 89.99,
-        category_id: categories.find((c) => c.name === "Shopping")!.id,
+        categoryName: "Shopping",
         date: new Date("2026-02-02"),
-        user_id: testUser.id,
       },
       {
-        id: uuidv4(),
         title: "Electricity Bill",
         amount: 125,
-        category_id: categories.find((c) => c.name === "Bills")!.id,
+        categoryName: "Bills",
         date: new Date("2026-02-05"),
-        user_id: testUser.id,
       },
     ];
 
-    for (const expense of expenses) {
-      await pool.query(
-        "INSERT INTO expenses (id, title, amount, category_id, date, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-          expense.id,
-          expense.title,
-          expense.amount,
-          expense.category_id,
-          expense.date,
-          expense.user_id,
-        ],
+    for (const expenseData of expensesData) {
+      const category = testUserCategories.find(
+        (c) => c.name === expenseData.categoryName,
       );
+      if (category) {
+        await Expense.create({
+          title: expenseData.title,
+          amount: expenseData.amount,
+          categoryId: category.id,
+          date: expenseData.date,
+          userId: testUser.id,
+        });
+      }
     }
     console.log("✅ Seeded expenses");
 
@@ -130,6 +112,7 @@ const seedDatabase = async () => {
     console.log("   Email: test@test.com, Password: 123456");
     console.log("   Email: demo@example.com, Password: demo123");
 
+    await sequelize.close();
     process.exit(0);
   } catch (error) {
     console.error("❌ Seeding failed:", error);

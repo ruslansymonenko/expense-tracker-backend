@@ -1,16 +1,18 @@
-import { Router, Request, Response } from "express";
-import { v4 as uuidv4 } from "uuid";
-import { pool } from "../config/database";
+import { Router, Response } from "express";
+import { Category } from "../models";
 import { AuthRequest, authMiddleware } from "../middleware/auth";
-import { RowDataPacket } from "mysql2";
 
 const router = Router();
 
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const [categories] = await pool.query<RowDataPacket[]>(
-      "SELECT * FROM categories ORDER BY name",
-    );
+    const userId = req.userId;
+
+    const categories = await Category.findAll({
+      where: { userId },
+      order: [["name", "ASC"]],
+      attributes: ["id", "name", "icon", "color", "userId", "createdAt"],
+    });
 
     res.json({ data: categories });
   } catch (error) {
@@ -19,18 +21,22 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/:id", async (req: Request, res: Response) => {
+router.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const [categories] = await pool.query<RowDataPacket[]>(
-      "SELECT * FROM categories WHERE id = ?",
-      [req.params.id],
-    );
+    const userId = req.userId;
 
-    if (categories.length === 0) {
+    const category = await Category.findOne({
+      where: {
+        id: req.params.id,
+        userId,
+      },
+    });
+
+    if (!category) {
       return res.status(404).json({ error: "Category not found" });
     }
 
-    res.json(categories[0]);
+    res.json(category);
   } catch (error) {
     console.error("Get category error:", error);
     res.status(500).json({ error: "Failed to fetch category" });
@@ -40,6 +46,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { name, icon, color } = req.body;
+    const userId = req.userId;
 
     if (!name || !icon || !color) {
       return res
@@ -47,18 +54,14 @@ router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
         .json({ error: "Name, icon, and color are required" });
     }
 
-    const categoryId = uuidv4();
-    await pool.query(
-      "INSERT INTO categories (id, name, icon, color) VALUES (?, ?, ?, ?)",
-      [categoryId, name, icon, color],
-    );
+    const category = await Category.create({
+      name,
+      icon,
+      color,
+      userId: userId!,
+    });
 
-    const [newCategory] = await pool.query<RowDataPacket[]>(
-      "SELECT * FROM categories WHERE id = ?",
-      [categoryId],
-    );
-
-    res.status(201).json(newCategory[0]);
+    res.status(201).json(category);
   } catch (error) {
     console.error("Create category error:", error);
     res.status(500).json({ error: "Failed to create category" });
@@ -68,22 +71,22 @@ router.post("/", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.put("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { name, icon, color } = req.body;
+    const userId = req.userId;
 
-    await pool.query(
-      "UPDATE categories SET name = ?, icon = ?, color = ? WHERE id = ?",
-      [name, icon, color, req.params.id],
-    );
+    const category = await Category.findOne({
+      where: {
+        id: req.params.id,
+        userId,
+      },
+    });
 
-    const [updatedCategory] = await pool.query<RowDataPacket[]>(
-      "SELECT * FROM categories WHERE id = ?",
-      [req.params.id],
-    );
-
-    if (updatedCategory.length === 0) {
+    if (!category) {
       return res.status(404).json({ error: "Category not found" });
     }
 
-    res.json(updatedCategory[0]);
+    await category.update({ name, icon, color });
+
+    res.json(category);
   } catch (error) {
     console.error("Update category error:", error);
     res.status(500).json({ error: "Failed to update category" });
@@ -95,14 +98,20 @@ router.delete(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const [result]: any = await pool.query(
-        "DELETE FROM categories WHERE id = ?",
-        [req.params.id],
-      );
+      const userId = req.userId;
 
-      if (result.affectedRows === 0) {
+      const category = await Category.findOne({
+        where: {
+          id: req.params.id,
+          userId,
+        },
+      });
+
+      if (!category) {
         return res.status(404).json({ error: "Category not found" });
       }
+
+      await category.destroy();
 
       res.json({ message: "Category deleted successfully" });
     } catch (error) {
